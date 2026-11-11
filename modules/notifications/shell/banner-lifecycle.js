@@ -1,0 +1,160 @@
+import Clutter from "gi://Clutter";
+import St from "gi://St";
+import * as Main from "resource:///org/gnome/shell/ui/main.js";
+import * as MessageTray from "resource:///org/gnome/shell/ui/messageTray.js";
+const NATIVE_LIFECYCLE = MessageTray.MessageTray
+    .prototype;
+const UPDATE_STATE = NATIVE_LIFECYCLE._updateState;
+const ALIGNMENT = {
+    fill: Clutter.ActorAlign.FILL,
+    top: Clutter.ActorAlign.START,
+    center: Clutter.ActorAlign.CENTER,
+    bottom: Clutter.ActorAlign.END,
+};
+export class BannerLifecycle {
+    settingsManager;
+    hidden;
+    hiding;
+    actor;
+    idleWatch = 0;
+    signals;
+    started = false;
+    constructor(settingsManager, notification, message, hidden, hiding) {
+        this.settingsManager = settingsManager;
+        this.hidden = hidden;
+        this.hiding = hiding;
+        const actor = new St.Widget({
+            layout_manager: new Clutter.BinLayout(),
+            reactive: true,
+            track_hover: true,
+            x_expand: true,
+            opacity: 0,
+        });
+        this.actor = actor;
+        actor.add_child(message);
+        actor._bannerBin = actor;
+        actor._banner = message;
+        actor._notification = notification;
+        actor._notificationQueue = [];
+        actor._notificationState = MessageTray.State.HIDDEN;
+        actor._notificationTimeoutId = 0;
+        actor._notificationLeftTimeoutId = 0;
+        actor._notificationRemoved = false;
+        actor._notificationExpired = false;
+        actor._pointerInNotification = false;
+        actor._notificationHovered = false;
+        actor._useLongerNotificationLeftTimeout = false;
+        actor._updatingState = false;
+        actor.idleMonitor = Main.messageTray.idleMonitor;
+        const focusGrabber = Object.getPrototypeOf(Main.messageTray._notificationFocusGrabber).constructor;
+        actor._notificationFocusGrabber = new focusGrabber(actor);
+        actor._updateState = () => this.update();
+        actor._showNotification = () => { };
+        actor._hideNotificationCompleted = () => {
+            actor._notificationState = MessageTray.State.HIDDEN;
+            this.hidden();
+        };
+        actor._hideNotification = (animate) => {
+            this.hiding();
+            actor._updateNotificationTimeout(0);
+            NATIVE_LIFECYCLE._hideNotification.call(actor, animate);
+        };
+        actor._updateShowingNotification = () => NATIVE_LIFECYCLE._updateShowingNotification.call(actor);
+        actor._showNotificationCompleted = () => NATIVE_LIFECYCLE._showNotificationCompleted.call(actor);
+        actor._updateNotificationTimeout = (timeout) => NATIVE_LIFECYCLE._updateNotificationTimeout.call(actor, timeout);
+        actor._resetNotificationLeftTimeout = () => NATIVE_LIFECYCLE._resetNotificationLeftTimeout.call(actor);
+        actor._notificationTimeout = () => NATIVE_LIFECYCLE._notificationTimeout.call(actor);
+        actor._onNotificationHoverChanged = () => NATIVE_LIFECYCLE._onNotificationHoverChanged.call(actor);
+        actor._onNotificationLeftTimeout = () => NATIVE_LIFECYCLE._onNotificationLeftTimeout.call(actor);
+        actor._onIdleMonitorBecameActive = () => {
+            this.idleWatch = 0;
+            NATIVE_LIFECYCLE._onIdleMonitorBecameActive.call(actor);
+        };
+        actor._expireNotification = () => NATIVE_LIFECYCLE._expireNotification.call(actor);
+        actor._expandBanner = (automatic) => NATIVE_LIFECYCLE._expandBanner.call(actor, automatic);
+        actor._ensureBannerFocused = () => NATIVE_LIFECYCLE._ensureBannerFocused.call(actor);
+        this.signals = [
+            actor.connect("notify::hover", () => actor._onNotificationHoverChanged()),
+            actor.connect("key-release-event", (_actor, event) => NATIVE_LIFECYCLE._onNotificationKeyRelease.call(actor, actor, event)),
+        ];
+    }
+    show() {
+        const actor = this.actor;
+        const notification = actor._notification;
+        if (!notification)
+            return;
+        if (!this.started) {
+            this.started = true;
+            actor._userActiveWhileNotificationShown =
+                actor.idleMonitor.get_idletime() <= 1000;
+            if (!actor._userActiveWhileNotificationShown) {
+                this.idleWatch = actor.idleMonitor.add_user_active_watch(actor._onIdleMonitorBecameActive);
+            }
+            const [pointerX, pointerY] = global.get_pointer();
+            actor._showNotificationMouseX = pointerX;
+            actor._showNotificationMouseY = pointerY;
+            actor._lastSeenMouseX = pointerX;
+            actor._lastSeenMouseY = pointerY;
+            actor._resetNotificationLeftTimeout();
+            actor.y =
+                actor.y_align === Clutter.ActorAlign.START ||
+                    actor.y_align === Clutter.ActorAlign.FILL
+                    ? -actor.get_preferred_height(-1)[1]
+                    : 0;
+        }
+        actor.show();
+        actor._updateShowingNotification();
+    }
+    setPosition(position) {
+        this.actor.y_align = ALIGNMENT[position];
+    }
+    update() {
+        const actor = this.actor;
+        const notification = actor._notification;
+        if (!this.started || !notification)
+            return;
+        const tray = Main.messageTray;
+        if (tray._busy && !actor._busy)
+            actor._updateNotificationTimeout(0);
+        actor._busy = tray._busy;
+        actor._bannerBlocked = tray._bannerBlocked;
+        const configuration = this.settingsManager.getConfigurationFor(notification.source?.title ?? "", notification.title, notification.body);
+        if (configuration.enabled &&
+            configuration.timeout.enabled &&
+            configuration.timeout.ignoreIdle) {
+            actor._userActiveWhileNotificationShown = true;
+        }
+        UPDATE_STATE.call(actor);
+    }
+    hide(animate) {
+        this.actor._hideNotification(animate);
+    }
+    refreshTimeout() {
+        if (this.actor._notificationState === MessageTray.State.SHOWN) {
+            this.actor._showNotificationCompleted();
+            this.update();
+        }
+    }
+    replaceMessage(message) {
+        const previous = this.actor.get_first_child();
+        if (previous)
+            this.actor.remove_child(previous);
+        this.actor.add_child(message);
+        this.actor._banner = message;
+        previous?.destroy();
+    }
+    dispose() {
+        this.actor._updateNotificationTimeout(0);
+        this.actor._resetNotificationLeftTimeout();
+        if (this.idleWatch)
+            this.actor.idleMonitor.remove_watch(this.idleWatch);
+        this.idleWatch = 0;
+        for (const signal of this.signals)
+            this.actor.disconnect(signal);
+        this.signals = [];
+        this.actor._notificationFocusGrabber.ungrabFocus();
+        this.actor._notification = null;
+        this.actor._notificationState = MessageTray.State.HIDDEN;
+        this.actor.remove_all_transitions();
+    }
+}

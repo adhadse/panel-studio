@@ -1,0 +1,9 @@
+{
+  "uuid": "panel-studio@adhadse",
+  "name": "Panel Studio",
+  "description": "One extension for the whole top bar. Rearrange, hide and evenly space panel items (including app indicators), move the clock to the right, plus a floating notification island, compact Quick Settings, a richer calendar menu and a full notification configurator.\n\nReplaces Sanket, Notification Configurator, Move Clock and Status Area Horizontal Spacing. Disable those before enabling this one.",
+  "settings-schema": "org.gnome.shell.extensions.panel-studio",
+  "gettext-domain": "panel-studio@adhadse",
+  "shell-version": ["51"],
+  "version": 1
+}

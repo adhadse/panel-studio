@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist gettext-domain="panel-studio@adhadse">
+    <schema id="org.gnome.shell.extensions.panel-studio" path="/org/gnome/shell/extensions/panel-studio/">
+        <key name="layout" type="s">
+            <default>'{"left":[],"center":[],"right":["quickSettings","dateMenu"],"hidden":[]}'</default>
+            <summary>Panel layout</summary>
+            <description>JSON object with the ordered items of the left, center and right boxes and the list of hidden items</description>
+        </key>
+
+        <key name="known-items" type="s">
+            <default>'[]'</default>
+            <summary>Panel items currently present</summary>
+            <description>Maintained by the extension so the preferences window can list the panel items</description>
+        </key>
+
+
+        <key name="item-inset" type="i">
+            <range min="2" max="24"/>
+            <default>8</default>
+            <summary>Item spacing</summary>
+            <description>Distance in pixels from the edge of each panel item to its content. Neighbouring items, and the icons inside the system menu, end up twice this far apart</description>
+        </key>
+
+        <key name="item-padding-overrides" type="s">
+            <default>'{}'</default>
+            <summary>Per-item button padding</summary>
+            <description>JSON object mapping item keys to a button padding in pixels that replaces the value derived from the item spacing. -1 keeps the theme default</description>
+        </key>
+
+
+    </schema>
+</schemalist>
