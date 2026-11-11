@@ -1,5 +1,8 @@
 # Panel Studio
 
+![Evenly spaced top bar: idle, system menu open, calendar open](screenshots/panel-spacing.png)
+
+
 One GNOME Shell extension (46–51) that replaces:
 
 | Was | Now |
@@ -20,3 +23,22 @@ Settings keep the original schema IDs for Sanket and Notification Configurator, 
 ## Licence
 
 GPL-3.0-or-later. Vendored code keeps its original copyright headers.
+
+## Screenshots
+
+| | |
+|---|---|
+| ![Notifications at the top right](screenshots/notification.png) | ![Quick Settings with compact toggles and notification island](screenshots/quicksettings.png) |
+| ![Calendar menu](screenshots/calendar.png) | ![Preferences: panel editor](screenshots/prefs.png) |
+
+## Install
+
+* **GNOME Extensions website:** search for *Panel Studio* on [extensions.gnome.org](https://extensions.gnome.org) (once approved).
+* **From a release:** download `panel-studio@adhadse.shell-extension.zip` from the [latest release](https://github.com/adhadse/panel-studio/releases/latest), then
+  `gnome-extensions install panel-studio@adhadse.shell-extension.zip`, log out and back in, and enable it.
+
+Disable Sanket, Notification Configurator, Move Clock and Status Area Horizontal Spacing first. They patch the same shell objects.
+
+## Releases
+
+Every push to `main` that changes the extension builds a zip, publishes a GitHub release (`v1.<run number>`) and, when enabled, submits it to extensions.gnome.org. See `.github/workflows/release.yml`.

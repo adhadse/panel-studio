@@ -1,0 +1,120 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'screenshots/**'
+      - '.github/**'
+      - 'LICENSE'
+      - '.gitignore'
+  workflow_dispatch:
+    inputs:
+      upload:
+        description: Also submit to extensions.gnome.org (needs EGO_UPLOAD=true and approval)
+        type: boolean
+        default: false
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  UUID: panel-studio@adhadse
+
+jobs:
+  build:
+    name: Build and release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate
+        run: |
+          set -euo pipefail
+          sudo apt-get update -q
+          sudo apt-get install -y -q libglib2.0-bin
+          python3 -m json.tool metadata.json > /dev/null
+          test "$(python3 -c 'import json;print(json.load(open("metadata.json"))["uuid"])')" = "$UUID"
+          glib-compile-schemas --strict --dry-run schemas
+          find . -name '*.js' -not -path './.git/*' -print0 | xargs -0 -n1 sh -c 'node --check --input-type=module < "$0" || { echo "syntax error in $0"; exit 1; }'
+          if git ls-files | grep -q 'gschemas.compiled'; then echo 'gschemas.compiled must not be committed'; exit 1; fi
+
+      - name: Compute version
+        id: version
+        run: |
+          tag="v1.${GITHUB_RUN_NUMBER}"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          python3 - "$tag" <<'PY'
+          import json, sys
+          m = json.load(open('metadata.json'))
+          m.pop('version', None)  # extensions.gnome.org assigns this itself
+          m['version-name'] = sys.argv[1].lstrip('v')
+          json.dump(m, open('metadata.json', 'w'), indent=2)
+          PY
+
+      - name: Package
+        run: |
+          set -euo pipefail
+          zip -r -q "${UUID}.shell-extension.zip" \
+            extension.js prefs.js metadata.json stylesheet.css schemas modules LICENSE README.md \
+            -x '*.compiled'
+          unzip -l "${UUID}.shell-extension.zip" | tail -1
+          if unzip -l "${UUID}.shell-extension.zip" | grep -q gschemas.compiled; then exit 1; fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: extension-zip
+          path: ${{ env.UUID }}.shell-extension.zip
+          if-no-files-found: error
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          gh release create "$TAG" "${UUID}.shell-extension.zip" \
+            --target "$GITHUB_SHA" \
+            --title "Panel Studio ${TAG#v}" \
+            --generate-notes \
+            --notes "Tested on GNOME Shell 51. Install: \`gnome-extensions install ${UUID}.shell-extension.zip\`, then log out and back in and enable it."
+
+  upload:
+    name: Submit to extensions.gnome.org
+    needs: build
+    # Off until EGO_UPLOAD=true is set as a repository variable.
+    if: ${{ vars.EGO_UPLOAD == 'true' && (github.event_name == 'push' || inputs.upload) }}
+    runs-on: ubuntu-latest
+    # Add required reviewers to this environment so each submission needs one click.
+    environment: extensions-gnome-org
+    container: fedora:latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: extension-zip
+
+      - name: Install gnome-extensions
+        run: dnf install -y -q gnome-shell
+
+      - name: Upload
+        env:
+          EGO_USERNAME: ${{ secrets.GNOME_USERNAME }}
+          EGO_PASSWORD: ${{ secrets.GNOME_PASSWORD }}
+        run: |
+          set -eu
+          if [ -z "${EGO_USERNAME}" ] || [ -z "${EGO_PASSWORD}" ]; then
+            echo 'GNOME_USERNAME / GNOME_PASSWORD secrets are not set; skipping upload.'
+            exit 1
+          fi
+          umask 077
+          printf '%s' "${EGO_PASSWORD}" > "${RUNNER_TEMP}/ego-password"
+          trap 'rm -f "${RUNNER_TEMP}/ego-password"' EXIT
+          gnome-extensions upload --accept-tos \
+            --user "${EGO_USERNAME}" \
+            --password-file "${RUNNER_TEMP}/ego-password" \
+            "${UUID}.shell-extension.zip"
