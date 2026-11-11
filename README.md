@@ -26,10 +26,17 @@ GPL-3.0-or-later. Vendored code keeps its original copyright headers.
 
 ## Screenshots
 
-| | |
-|---|---|
-| ![Notifications at the top right](screenshots/notification.png) | ![Quick Settings with compact toggles and notification island](screenshots/quicksettings.png) |
-| ![Calendar menu](screenshots/calendar.png) | ![Preferences: panel editor](screenshots/prefs.png) |
+### Notifications at the top right
+![Notifications at the top right](screenshots/notification.png)
+
+### Quick Settings with compact toggles and the notification island
+![Quick Settings with compact toggles and notification island](screenshots/quicksettings.png)
+
+### Calendar menu
+![Calendar menu](screenshots/calendar.png)
+
+### Panel editor in preferences
+![Preferences: panel editor](screenshots/prefs.png)
 
 ## Install
 
